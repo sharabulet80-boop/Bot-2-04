@@ -502,6 +502,32 @@ async def admin_export(callback: types.CallbackQuery):
         await callback.message.edit_text(
             "📋 Ҷавобҳо нестанд.", reply_markup=admin_main_kb
         )
+
+    q1_opts = QUESTIONS[0]["options"]
+    q2_opts = QUESTIONS[1]["options"]
+    q3_opts = QUESTIONS[2]["options"]
+    q4_opts = QUESTIONS[3]["options"]
+    q5_opts = QUESTIONS[4]["options"]
+    q6_opts = QUESTIONS[5]["options"]
+
+    csv = "ID;UserID;Username;Сана;Пештар курс харидӣ?;Агар Бале, барои чӣ харидӣ?;Дар он курс чӣ намерасид?;Ҳоло бештар кадом мушкил?;Агар ин ҳал шавад, ту бештар чӣ мехоҳӣ?;Бюджет\n"
+    for row in rows:
+        q1 = q1_opts.get(row[4], "-") if row[4] else "-"
+        q2 = q2_opts.get(row[5], "-") if row[5] else "-"
+        q3 = q3_opts.get(row[6], "-") if row[6] else "-"
+        q4 = q4_opts.get(row[7], "-") if row[7] else "-"
+        q5 = q5_opts.get(row[8], "-") if row[8] else "-"
+        q6 = q6_opts.get(row[9], "-") if row[9] else "-"
+        created = row[3][:19] if row[3] else "-"
+        row_user = str(row[2]) if row[2] else str(row[1])
+        csv += f"{row[0]};{row[1]};{row_user};{created};{q1};{q2};{q3};{q4};{q5};{q6}\n"
+
+    with open("responses_export.csv", "w", encoding="utf-8") as f:
+        f.write(csv)
+
+    await callback.message.answer_document(
+        FSInputFile("responses_export.csv"), caption="📤 Экспорт ҷавобҳо"
+    )
         return
 
     csv = "ID,UserID,Username,Created,Q1,Q2,Q2_Custom,Q3,Q4,Q5,Q6\n"
