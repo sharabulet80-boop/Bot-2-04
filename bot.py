@@ -199,7 +199,13 @@ def get_start_kb():
                     text="Барои гирифтани дарси 3-рӯзаи бепул 📝",
                     callback_data="start_survey",
                 )
-            ]
+            ],
+            [
+                InlineKeyboardButton(
+                    text="Ворид шудан ба канал 📺",
+                    url="https://t.me/jannat_abdullaeva_kanal",
+                )
+            ],
         ]
     )
 
@@ -225,6 +231,12 @@ def get_retry_kb():
             [
                 InlineKeyboardButton(
                     text="📝 Суолномаи нав", callback_data="start_survey"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="Ворид шудан ба канал 📺",
+                    url="https://t.me/jannat_abdullaeva_kanal",
                 )
             ],
         ]
@@ -343,37 +355,14 @@ def build_reply_markup(button_data):
     )
 
 
-EXAMPLE_TEXT = """📝 МИСОЛ:
-
-1. Пештар курс харидӣ?
-➜ Ҳа
-
-2. Агар ҳа, барои чӣ харидӣ?
-➜ дард доштам
-
-3. Дар он курс чӣ намерасид?
-➜ натиҷа
-
-4. Ҳоло бештар кадом мушкил туро азоб медиҳад?
-➜ вобастагӣ
-
-5. Агар ин ҳал шавад, ту бештар чӣ мехоҳӣ?
-➜ оромӣ
-
-6. Барои ҳал шудани ин мушкил чанд пул дода метавонӣ?
-➜ 50$
-
----
-Шумо танһо ҷавобҳоро интихоб кунед! ✅"""
-
-
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     add_user(message.from_user.id)
+    username = message.from_user.first_name or "друг"
     await message.answer(
-        "👋 Салом! Барои гирифтани дарси 3-рӯзаи бепул, лутфан суолномаро пур кунед.\n\n"
-        "📝 Интихобҳоро бо тугмаҳо зер кунед.\n\n"
-        "ℹ️ МИСОЛ:\n" + EXAMPLE_TEXT,
+        f"👋 Салом, {username}! 🌸\n\n"
+        "Барои гирифтани дарси 3-рӯзаи бепул, лутфан суолномаро пур кунед.\n\n"
+        "📝 Интихобҳоро бо тугмаҳо зер кунед.",
         reply_markup=get_start_kb(),
     )
 
@@ -486,14 +475,14 @@ async def answer_q6(callback: types.CallbackQuery, state: FSMContext):
 
     await callback.message.edit_text(
         "✅ Ташаккур! Ҷавобҳои шумо сабт шуд.\n\n"
-        "Барои боз гирифтани дарси бепул, мо бо шумо дар алоқа мешавем.\n\n"
         "📋 Натиҷа:\n"
         f"1️⃣ Курс харидӣ: {QUESTIONS[0]['options'].get(data.get('q1', ''), '-')}\n"
         f"2️⃣ Сабаб: {QUESTIONS[1]['options'].get(data.get('q2', ''), '-') or '-'}\n"
         f"3️⃣ Намерасид: {QUESTIONS[2]['options'].get(data.get('q3', ''), '-')}\n"
         f"4️⃣ Мушкил: {QUESTIONS[3]['options'].get(data.get('q4', ''), '-')}\n"
         f"5️⃣ Мехоҳӣ: {QUESTIONS[4]['options'].get(data.get('q5', ''), '-')}\n"
-        f"6️⃣ Бюджет: {QUESTIONS[5]['options'].get(data.get('q6', ''), '-')}",
+        f"6️⃣ Бюджет: {QUESTIONS[5]['options'].get(data.get('q6', ''), '-')}\n\n"
+        "📺 Канал ворид шавед ва дар он ҷо дарси бепулро дастрас кунед 👍",
         reply_markup=get_retry_kb(),
     )
 
