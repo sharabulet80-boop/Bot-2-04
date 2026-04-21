@@ -221,12 +221,6 @@ def get_options_kb(question_id: str):
 def get_retry_kb():
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🔄 Аз нав", callback_data="retry_survey")],
-            [
-                InlineKeyboardButton(
-                    text="📝 Суолномаи нав", callback_data="start_survey"
-                )
-            ],
             [
                 InlineKeyboardButton(
                     text="Ворид шудан ба канал 📺",
@@ -467,7 +461,7 @@ async def answer_q6(callback: types.CallbackQuery, state: FSMContext):
     save_response(user_id, username, data)
     await state.clear()
 
-    await callback.message.edit_text(
+    result_text = (
         "✅ Ташаккур! Ҷавобҳои шумо сабт шуд.\n\n"
         "📋 Натиҷа:\n"
         f"1️⃣ Курс харидӣ: {QUESTIONS[0]['options'].get(data.get('q1', ''), '-')}\n"
@@ -476,9 +470,16 @@ async def answer_q6(callback: types.CallbackQuery, state: FSMContext):
         f"4️⃣ Мушкил: {QUESTIONS[3]['options'].get(data.get('q4', ''), '-')}\n"
         f"5️⃣ Мехоҳӣ: {QUESTIONS[4]['options'].get(data.get('q5', ''), '-')}\n"
         f"6️⃣ Бюджет: {QUESTIONS[5]['options'].get(data.get('q6', ''), '-')}\n\n"
-        "📺 Канал ворид шавед ва дар он ҷо дарси бепулро дастрас кунед 👍",
-        reply_markup=get_retry_kb(),
+        "Дар ин 3 рӯз ту мефаҳмӣ:\n"
+        "1️⃣ Чаро ту дар муносибат ин қадар вобаста мешавӣ\n"
+        "2️⃣ Чаро фикрҳоят ором намешаванд\n"
+        "3️⃣ Қадами аввал, ки туро ба оромӣ бармегардонад\n"
+        "Ин дарсҳо содаанд, кӯтоҳанд ва бевосита ба ҳолати ту равона шудаанд.\n\n"
+        "⛔️ Ин барои ҳама нест.\n"
+        "Фақат барои касоне, ки ҳақиқатан мехоҳанд аз ин ҳолат барорад\n\n"
+        "Омода боши  ба Дарси ройгон ворид шав !"
     )
+    await callback.message.edit_text(result_text, reply_markup=get_retry_kb())
 
 
 @dp.message(Command("admin"))
