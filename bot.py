@@ -502,6 +502,7 @@ async def admin_export(callback: types.CallbackQuery):
         await callback.message.edit_text(
             "📋 Ҷавобҳо нестанд.", reply_markup=admin_main_kb
         )
+        return
 
     q1_opts = QUESTIONS[0]["options"]
     q2_opts = QUESTIONS[1]["options"]
@@ -525,15 +526,12 @@ async def admin_export(callback: types.CallbackQuery):
     with open("responses_export.csv", "w", encoding="utf-8") as f:
         f.write(csv)
 
-
-await callback.message.answer_document(
-    FSInputFile("responses_export.csv"), caption="📤 Экспорт ҷавобҳо"
-)
+    await callback.message.answer_document(
+        FSInputFile("responses_export.csv"), caption="📤 Экспорт ҷавобҳо"
+    )
 
 
 async def main():
-    await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot)
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
