@@ -257,26 +257,8 @@ def is_admin(user_id):
 
 admin_main_kb = InlineKeyboardMarkup(
     inline_keyboard=[
-        [
-            InlineKeyboardButton(
-                text="📢 Рассылка", callback_data="admin_new_broadcast"
-            ),
-            InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats"),
-        ],
-        [
-            InlineKeyboardButton(text="📋 Жавобҳо", callback_data="admin_responses"),
-            InlineKeyboardButton(text="📤 Экспорт", callback_data="admin_export"),
-        ],
-        [
-            InlineKeyboardButton(
-                text="🎥 Круглое видео", callback_data="admin_video_note"
-            ),
-            InlineKeyboardButton(text="📋 Список", callback_data="admin_users_list"),
-        ],
-        [
-            InlineKeyboardButton(text="🔔 Автоответчик", callback_data="admin_auto"),
-            InlineKeyboardButton(text="❌ Закрыть", callback_data="admin_close"),
-        ],
+        [InlineKeyboardButton(text="📤 Экспорт", callback_data="admin_export")],
+        [InlineKeyboardButton(text="❌ Закрыть", callback_data="admin_close")],
     ]
 )
 
@@ -542,7 +524,7 @@ async def admin_panel(message: types.Message):
         return
     count = get_responses_count()
     await message.answer(
-        f"🔧 Админ-панель\n\n👥 Пользователей: {len(users)}\n📝 Ответов: {count}",
+        f"🔧 Админ\n\n📝 Жавобҳо: {count}",
         reply_markup=admin_main_kb,
     )
 
