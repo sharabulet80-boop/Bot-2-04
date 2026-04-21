@@ -133,10 +133,10 @@ def save_auto_config(config):
 auto_config = load_auto_config()
 
 QUESTIONS = [
-    {"id": "q1", "text": "1. Пештар курс харидӣ?", "options": {"a": "Ҳа", "b": "Не"}},
+    {"id": "q1", "text": "1. Пештар курс харидӣ?", "options": {"a": "Бале", "b": "Не"}},
     {
         "id": "q2",
-        "text": "2. Агар ҳа, барои чӣ харидӣ?",
+        "text": "2. Агар Бале, барои чӣ харидӣ?",
         "options": {
             "a": "дард доштам",
             "b": "натиҷа мехостам",
@@ -173,8 +173,8 @@ QUESTIONS = [
     },
     {
         "id": "q6",
-        "text": "6. Барои ҳал шудани ин мушкил чанд пул дода метавонӣ?",
-        "options": {"a": "30$", "b": "50$", "c": "100$", "d": "500$"},
+        "text": "6. Барои ҳал шудани ин мушкил чӣ кадар пул дода метавонӣ?",
+        "options": {"a": "20$", "b": "50$", "c": "100$", "d": "500$"},
     },
 ]
 
@@ -196,16 +196,10 @@ def get_start_kb():
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="Барои гирифтани дарси 3-рӯзаи бепул 📝",
+                    text="Тест 📝",
                     callback_data="start_survey",
                 )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="Ворид шудан ба канал 📺",
-                    url="https://t.me/jannat_abdullaeva_kanal",
-                )
-            ],
+            ]
         ]
     )
 
@@ -372,7 +366,7 @@ async def start_survey(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(SurveyStates.waiting_q1)
     q = QUESTIONS[0]
     await callback.message.edit_text(
-        f"📋 Суолнома\n\n{q['text']}\n\nИнтихоб кунед:",
+        f"📋 Барои гирифтани дарси 3-рӯзаи бепул, ба инҳо ҷавоб деҳ:\n\n{q['text']}\n\nИнтихоб кунед:",
         reply_markup=get_options_kb("q1"),
     )
 
@@ -400,7 +394,7 @@ async def answer_q1(callback: types.CallbackQuery, state: FSMContext):
         await state.set_state(SurveyStates.waiting_q2)
         q = QUESTIONS[1]
         await callback.message.edit_text(
-            f"📋 Суолнома\n\n{q['text']}\n\nИнтихоб кунед:",
+            f"📋 Барои гирифтани дарси 3-рӯзаи бепул, ба инҳо ҷавоб деҳ:\n\n{q['text']}\n\nИнтихоб кунед:",
             reply_markup=get_options_kb("q2"),
         )
     else:
@@ -408,7 +402,7 @@ async def answer_q1(callback: types.CallbackQuery, state: FSMContext):
         await state.set_state(SurveyStates.waiting_q3)
         q = QUESTIONS[2]
         await callback.message.edit_text(
-            f"📋 Суолнома\n\n{q['text']}\n\nИнтихоб кунед:",
+            f"📋 Барои гирифтани дарси 3-рӯзаи бепул, ба инҳо ҷавоб деҳ:\n\n{q['text']}\n\nИнтихоб кунед:",
             reply_markup=get_options_kb("q3"),
         )
 
@@ -420,7 +414,7 @@ async def answer_q2(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(SurveyStates.waiting_q3)
     q = QUESTIONS[2]
     await callback.message.edit_text(
-        f"📋 Суолнома\n\n{q['text']}\n\nИнтихоб кунед:",
+        f"📋 Барои гирифтани дарси 3-рӯзаи бепул, ба инҳо ҷавоб деҳ:\n\n{q['text']}\n\nИнтихоб кунед:",
         reply_markup=get_options_kb("q3"),
     )
 
@@ -432,7 +426,7 @@ async def answer_q3(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(SurveyStates.waiting_q4)
     q = QUESTIONS[3]
     await callback.message.edit_text(
-        f"📋 Суолнома\n\n{q['text']}\n\nИнтихоб кунед:",
+        f"📋 Барои гирифтани дарси 3-рӯзаи бепул, ба инҳо ҷавоб деҳ:\n\n{q['text']}\n\nИнтихоб кунед:",
         reply_markup=get_options_kb("q4"),
     )
 
@@ -444,7 +438,7 @@ async def answer_q4(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(SurveyStates.waiting_q5)
     q = QUESTIONS[4]
     await callback.message.edit_text(
-        f"📋 Суолнома\n\n{q['text']}\n\nИнтихоб кунед:",
+        f"📋 Барои гирифтани дарси 3-рӯзаи бепул, ба инҳо ҷавоб деҳ:\n\n{q['text']}\n\nИнтихоб кунед:",
         reply_markup=get_options_kb("q5"),
     )
 
@@ -456,7 +450,7 @@ async def answer_q5(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(SurveyStates.waiting_q6)
     q = QUESTIONS[5]
     await callback.message.edit_text(
-        f"📋 Суолнома\n\n{q['text']}\n\nИнтихоб кунед:",
+        f"📋 Барои гирифтани дарси 3-рӯзаи бепул, ба инҳо ҷавоб деҳ:\n\n{q['text']}\n\nИнтихоб кунед:",
         reply_markup=get_options_kb("q6"),
     )
 
