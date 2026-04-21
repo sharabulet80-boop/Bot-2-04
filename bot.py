@@ -525,21 +525,10 @@ async def admin_export(callback: types.CallbackQuery):
     with open("responses_export.csv", "w", encoding="utf-8") as f:
         f.write(csv)
 
-    await callback.message.answer_document(
-        FSInputFile("responses_export.csv"), caption="📤 Экспорт ҷавобҳо"
-    )
-        return
 
-    csv = "ID,UserID,Username,Created,Q1,Q2,Q2_Custom,Q3,Q4,Q5,Q6\n"
-    for row in rows:
-        csv += f"{row[0]},{row[1]},{row[2]},{row[3]},{row[4]},{row[5]},{row[6]},{row[7]},{row[8]},{row[9]},{row[10]}\n"
-
-    with open("responses_export.csv", "w", encoding="utf-8") as f:
-        f.write(csv)
-
-    await callback.message.answer_document(
-        FSInputFile("responses_export.csv"), caption="📤 Экспорт ҷавобҳо"
-    )
+await callback.message.answer_document(
+    FSInputFile("responses_export.csv"), caption="📤 Экспорт ҷавобҳо"
+)
 
 
 async def main():
