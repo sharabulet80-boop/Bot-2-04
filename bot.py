@@ -250,6 +250,7 @@ class MailingStates(StatesGroup):
     waiting_for_text = State()
     waiting_for_photo = State()
     waiting_for_button_choice = State()
+    waiting_for_custom_button_text = State()
     waiting_for_link = State()
     waiting_for_confirm = State()
     waiting_for_time = State()
@@ -313,6 +314,7 @@ lesson_choice_kb = InlineKeyboardMarkup(
         [InlineKeyboardButton(text="Тамошои Дарси 1", callback_data="lesson_1")],
         [InlineKeyboardButton(text="Тамошои Дарси 2", callback_data="lesson_2")],
         [InlineKeyboardButton(text="Тамошои Дарси 3", callback_data="lesson_3")],
+        [InlineKeyboardButton(text="⌨️ Свой вариант", callback_data="lesson_custom")],
         [InlineKeyboardButton(text="❌ Без кнопки", callback_data="lesson_none")],
     ]
 )
@@ -683,11 +685,20 @@ async def mailing_button_choice(callback: types.CallbackQuery, state: FSMContext
     if choice == "none":
         await state.update_data(button_text=None)
         await show_mailing_preview(callback.message, state)
+    elif choice == "custom":
+        await state.set_state(MailingStates.waiting_for_custom_button_text)
+        await callback.message.edit_text("⌨️ Введите текст, который будет на кнопке:")
     else:
         text = f"Тамошои Дарси {choice}"
         await state.update_data(button_text=text)
         await state.set_state(MailingStates.waiting_for_link)
         await callback.message.edit_text(f"🔗 Отправьте ССЫЛКУ для кнопки '{text}':", reply_markup=cancel_kb)
+
+@dp.message(MailingStates.waiting_for_custom_button_text)
+async def mailing_custom_button_text(message: types.Message, state: FSMContext):
+    await state.update_data(button_text=message.text)
+    await state.set_state(MailingStates.waiting_for_link)
+    await message.answer(f"🔗 Теперь отправьте ССЫЛКУ для кнопки '{message.text}':", reply_markup=cancel_kb)
 
 @dp.message(MailingStates.waiting_for_link)
 async def mailing_link_received(message: types.Message, state: FSMContext):
@@ -768,27 +779,31 @@ async def run_broadcast(state_or_data):
         # Для трекинга меняем URL-кнопку на CALLBACK с данными для редиректа
         kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=btn_text, callback_data=f"cl_{choice_num}_{link}")]])
     
-    # Загружаем всех пользователей из БД вместо json
+    # Загружаем всех пользователей из БД (включая имена)
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute("SELECT user_id FROM users")
-    users_list = [r[0] for r in c.fetchall()]
+    c.execute("SELECT user_id, full_name, username FROM users")
+    users = c.fetchall()
     conn.close()
     
     count = 0
-    for user_id in users_list:
+    for user_id, full_name, username in users:
+        # Персонализация: замена слова name на имя пользователя
+        display_name = full_name or username or "друг"
+        personalized_text = text.replace("name", display_name)
+        
         try:
             if photo:
-                await bot.send_photo(user_id, photo, caption=text, reply_markup=kb)
+                await bot.send_photo(user_id, photo, caption=personalized_text, reply_markup=kb)
             else:
-                await bot.send_message(user_id, text, reply_markup=kb)
+                await bot.send_message(user_id, personalized_text, reply_markup=kb)
             count += 1
             await asyncio.sleep(0.05)
         except Exception as e:
             logging.error(f"Failed to send to {user_id}: {e}")
             
     for admin_id in ADMIN_IDS:
-        await bot.send_message(admin_id, f"✅ Рассылка завершена!\n📩 Видели (отправлено): {count}\n👤 Всего в базе: {len(users_list)}")
+        await bot.send_message(admin_id, f"✅ Рассылка завершена!\n📩 Видели (отправлено): {count}\n👤 Всего в базе: {len(users)}")
 
 @dp.callback_query(lambda c: c.data == "admin_cancel")
 async def admin_cancel(callback: types.CallbackQuery, state: FSMContext):
