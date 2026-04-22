@@ -14,6 +14,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from dotenv import load_dotenv
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.date import DateTrigger
 
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -27,6 +29,7 @@ dp = Dispatcher(storage=storage)
 USERS_FILE = "users.json"
 AUTO_CONFIG_FILE = "auto_config.json"
 DB_FILE = "responses.db"
+scheduler = AsyncIOScheduler()
 
 
 def init_db():
@@ -191,6 +194,14 @@ class SurveyStates(StatesGroup):
     waiting_q6 = State()
 
 
+class MailingStates(StatesGroup):
+    waiting_for_text = State()
+    waiting_for_button_choice = State()
+    waiting_for_link = State()
+    waiting_for_confirm = State()
+    waiting_for_time = State()
+
+
 def get_start_kb():
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -237,8 +248,27 @@ def is_admin(user_id):
 
 admin_main_kb = InlineKeyboardMarkup(
     inline_keyboard=[
-        [InlineKeyboardButton(text="📤 Экспорт", callback_data="admin_export")],
+        [InlineKeyboardButton(text="📢 Рассылка", callback_data="admin_mailing")],
+        [InlineKeyboardButton(text="📤 Экспорт в Excel", callback_data="admin_export")],
         [InlineKeyboardButton(text="❌ Закрыть", callback_data="admin_close")],
+    ]
+)
+
+lesson_choice_kb = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="Тамошои Дарси 1", callback_data="lesson_1")],
+        [InlineKeyboardButton(text="Тамошои Дарси 2", callback_data="lesson_2")],
+        [InlineKeyboardButton(text="Тамошои Дарси 3", callback_data="lesson_3")],
+        [InlineKeyboardButton(text="❌ Без кнопки", callback_data="lesson_none")],
+    ]
+)
+
+mailing_confirm_kb = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="🚀 Отправить сейчас", callback_data="send_now")],
+        [InlineKeyboardButton(text="⏰ Через 1 час", callback_data="send_1h")],
+        [InlineKeyboardButton(text="📅 Своё время", callback_data="send_custom")],
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="admin_cancel")],
     ]
 )
 
@@ -495,13 +525,10 @@ async def admin_panel(message: types.Message):
 
 @dp.callback_query(lambda c: c.data == "admin_export")
 async def admin_export(callback: types.CallbackQuery):
-    if not is_admin(callback.from_user.id):
-        return
+    if not is_admin(callback.from_user.id): return
     rows = get_all_responses()
     if not rows:
-        await callback.message.edit_text(
-            "📋 Ҷавобҳо нестанд.", reply_markup=admin_main_kb
-        )
+        await callback.message.edit_text("📋 Ҷавобҳо нестанд.", reply_markup=admin_main_kb)
         return
 
     q1_opts = QUESTIONS[0]["options"]
@@ -526,12 +553,130 @@ async def admin_export(callback: types.CallbackQuery):
     with open("responses_export.csv", "w", encoding="utf-8") as f:
         f.write(csv)
 
-    await callback.message.answer_document(
-        FSInputFile("responses_export.csv"), caption="📤 Экспорт ҷавобҳо"
-    )
+    await callback.message.answer_document(FSInputFile("responses_export.csv"), caption="📤 Экспорт ҷавобҳо")
+
+
+# --- РАССЫЛКА (Mailing) ---
+
+@dp.callback_query(lambda c: c.data == "admin_mailing")
+async def start_mailing(callback: types.CallbackQuery, state: FSMContext):
+    if not is_admin(callback.from_user.id): return
+    await state.set_state(MailingStates.waiting_for_text)
+    await callback.message.edit_text("📝 Введите текст для рассылки:", reply_markup=cancel_kb)
+
+@dp.message(MailingStates.waiting_for_text)
+async def mailing_text_received(message: types.Message, state: FSMContext):
+    await state.update_data(text=message.text)
+    await state.set_state(MailingStates.waiting_for_button_choice)
+    await message.answer("Выберите кнопку для сообщения:", reply_markup=lesson_choice_kb)
+
+@dp.callback_query(lambda c: c.data.startswith("lesson_"))
+async def mailing_button_choice(callback: types.CallbackQuery, state: FSMContext):
+    choice = callback.data.split("_")[1]
+    if choice == "none":
+        await state.update_data(button_text=None)
+        await show_mailing_preview(callback.message, state)
+    else:
+        text = f"Тамошои Дарси {choice}"
+        await state.update_data(button_text=text)
+        await state.set_state(MailingStates.waiting_for_link)
+        await callback.message.edit_text(f"🔗 Отправьте ссылку для кнопки '{text}':", reply_markup=cancel_kb)
+
+@dp.message(MailingStates.waiting_for_link)
+async def mailing_link_received(message: types.Message, state: FSMContext):
+    if not (message.text.startswith("http") or message.text.startswith("t.me")):
+        await message.answer("❌ Это не похоже на ссылку. Попробуйте еще раз:")
+        return
+    await state.update_data(link=message.text)
+    await show_mailing_preview(message, state)
+
+async def show_mailing_preview(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    text = data.get("text")
+    btn_text = data.get("button_text")
+    link = data.get("link")
+    
+    kb = None
+    if btn_text and link:
+        kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=btn_text, url=link)]])
+        
+    await message.answer("👀 ПРЕДПРОСМОТР СООБЩЕНИЯ:")
+    await message.answer(text, reply_markup=kb)
+    await message.answer("Все верно? Выберите время отправки:", reply_markup=mailing_confirm_kb)
+    await state.set_state(MailingStates.waiting_for_confirm)
+
+@dp.callback_query(lambda c: c.data == "send_now")
+async def mailing_send_now(callback: types.CallbackQuery, state: FSMContext):
+    await callback.message.edit_text("🚀 Рассылка запущена...")
+    await run_broadcast(state)
+    await state.clear()
+
+@dp.callback_query(lambda c: c.data == "send_1h")
+async def mailing_send_1h(callback: types.CallbackQuery, state: FSMContext):
+    run_at = datetime.now() + timedelta(hours=1)
+    data = await state.get_data()
+    scheduler.add_job(run_broadcast, DateTrigger(run_at=run_at), args=[data])
+    await callback.message.edit_text(f"⏰ Рассылка запланирована на {run_at.strftime('%H:%M')}")
+    await state.clear()
+
+@dp.callback_query(lambda c: c.data == "send_custom")
+async def mailing_send_custom(callback: types.CallbackQuery, state: FSMContext):
+    await state.set_state(MailingStates.waiting_for_time)
+    await callback.message.edit_text("📅 Введите время в формате ГГГГ-ММ-ДД ЧЧ:ММ (например: 2024-05-01 15:00):", reply_markup=cancel_kb)
+
+@dp.message(MailingStates.waiting_for_time)
+async def mailing_time_custom(message: types.Message, state: FSMContext):
+    try:
+        run_at = datetime.strptime(message.text, "%Y-%m-%d %H:%M")
+        if run_at < datetime.now():
+            await message.answer("❌ Время не может быть в прошлом!")
+            return
+        data = await state.get_data()
+        scheduler.add_job(run_broadcast, DateTrigger(run_at=run_at), args=[data])
+        await message.answer(f"📅 Рассылка запланирована на {run_at}")
+        await state.clear()
+    except ValueError:
+        await message.answer("❌ Неверный формат. Нужно: ГГГГ-ММ-ДД ЧЧ:ММ")
+
+async def run_broadcast(state_or_data):
+    if isinstance(state_or_data, FSMContext):
+        data = await state_or_data.get_data()
+    else:
+        data = state_or_data
+        
+    text = data.get("text")
+    btn_text = data.get("button_text")
+    link = data.get("link")
+    kb = None
+    if btn_text and link:
+        kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=btn_text, url=link)]])
+    
+    users_list = load_users()
+    count = 0
+    for user_id in users_list:
+        try:
+            await bot.send_message(user_id, text, reply_markup=kb)
+            count += 1
+            await asyncio.sleep(0.05) # Защита от флуда
+        except Exception as e:
+            logging.error(f"Failed to send to {user_id}: {e}")
+            
+    # Уведомляем админа
+    for admin_id in ADMIN_IDS:
+        await bot.send_message(admin_id, f"✅ Рассылка завершена! Получили: {count} пользователей.")
+
+@dp.callback_query(lambda c: c.data == "admin_cancel")
+async def admin_cancel(callback: types.CallbackQuery, state: FSMContext):
+    await state.clear()
+    await admin_panel(callback.message)
+
+@dp.callback_query(lambda c: c.data == "admin_close")
+async def admin_close(callback: types.CallbackQuery):
+    await callback.message.delete()
 
 
 async def main():
+    scheduler.start()
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
