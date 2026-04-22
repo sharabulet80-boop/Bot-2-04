@@ -50,6 +50,24 @@ def init_db():
             q6 TEXT
         )
     """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            user_id INTEGER PRIMARY KEY,
+            username TEXT,
+            full_name TEXT,
+            joined_at TEXT
+        )
+    """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS click_stats (
+            lesson_type TEXT PRIMARY KEY,
+            click_count INTEGER DEFAULT 0
+        )
+    """)
+    # Инициализируем клики нулями, если их еще нет
+    for i in [1, 2, 3]:
+        c.execute("INSERT OR IGNORE INTO click_stats (lesson_type, click_count) VALUES (?, 0)", (f"lesson_{i}",))
+    
     conn.commit()
     conn.close()
 
@@ -115,10 +133,44 @@ def save_users(users):
 users = load_users()
 
 
-def add_user(user_id):
-    if user_id not in users:
-        users.add(user_id)
-        save_users(users)
+def add_user(user_id, username=None, full_name=None):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("INSERT OR IGNORE INTO users (user_id, username, full_name, joined_at) VALUES (?, ?, ?, ?)",
+              (user_id, username, full_name, datetime.now().isoformat()))
+    conn.commit()
+    conn.close()
+
+def get_stats():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    
+    # Всего пользователей
+    c.execute("SELECT COUNT(*) FROM users")
+    total_users = c.fetchone()[0]
+    
+    # Новые за 30 дней
+    month_ago = (datetime.now() - timedelta(days=30)).isoformat()
+    c.execute("SELECT COUNT(*) FROM users WHERE joined_at > ?", (month_ago,))
+    new_users_month = c.fetchone()[0]
+    
+    # Клики
+    c.execute("SELECT lesson_type, click_count FROM click_stats")
+    clicks = dict(c.fetchall())
+    
+    conn.close()
+    return {
+        "total_users": total_users,
+        "new_users_month": new_users_month,
+        "clicks": clicks
+    }
+
+def record_click(lesson_type):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("UPDATE click_stats SET click_count = click_count + 1 WHERE lesson_type = ?", (lesson_type,))
+    conn.commit()
+    conn.close()
 
 
 def load_auto_config():
@@ -196,6 +248,7 @@ class SurveyStates(StatesGroup):
 
 class MailingStates(StatesGroup):
     waiting_for_text = State()
+    waiting_for_photo = State()
     waiting_for_button_choice = State()
     waiting_for_link = State()
     waiting_for_confirm = State()
@@ -249,6 +302,7 @@ def is_admin(user_id):
 admin_main_kb = InlineKeyboardMarkup(
     inline_keyboard=[
         [InlineKeyboardButton(text="📢 Рассылка", callback_data="admin_mailing")],
+        [InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats")],
         [InlineKeyboardButton(text="📤 Экспорт в Excel", callback_data="admin_export")],
         [InlineKeyboardButton(text="❌ Закрыть", callback_data="admin_close")],
     ]
@@ -375,7 +429,11 @@ def build_reply_markup(button_data):
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    add_user(message.from_user.id)
+    add_user(
+        message.from_user.id, 
+        message.from_user.username, 
+        message.from_user.full_name
+    )
     username = message.from_user.first_name or "друг"
     await message.answer(
         f"👋 Салом, {username}! 🌸\n\n"
@@ -556,23 +614,72 @@ async def admin_export(callback: types.CallbackQuery):
     await callback.message.answer_document(FSInputFile("responses_export.csv"), caption="📤 Экспорт ҷавобҳо")
 
 
+# --- СТАТИСТИКА ---
+
+@dp.callback_query(lambda c: c.data == "admin_stats")
+async def admin_stats(callback: types.CallbackQuery):
+    if not is_admin(callback.from_user.id): return
+    s = get_stats()
+    text = (
+        "📊 **Статистика Бот**\n\n"
+        f"👥 Джамъи корбарон: {s['total_users']}\n"
+        f"📅 Нав дар 30 рӯз (моҳ): {s['new_users_month']}\n\n"
+        "📈 **Клики Тугмаҳо (Урокҳо):**\n"
+        f"🔹 Дарси 1: {s['clicks'].get('lesson_1', 0)}\n"
+        f"🔹 Дарси 2: {s['clicks'].get('lesson_2', 0)}\n"
+        f"🔹 Дарси 3: {s['clicks'].get('lesson_3', 0)}\n"
+    )
+    await callback.message.edit_text(text, parse_mode="Markdown", reply_markup=admin_main_kb)
+
+# Обработка клика по уроку (трекинг)
+@dp.callback_query(lambda c: c.data.startswith("cl_"))
+async def track_lesson_click(callback: types.CallbackQuery):
+    # Формат: cl_{num}_{url}
+    parts = callback.data.split("_")
+    lesson_num = parts[1]
+    url = "_".join(parts[2:]) # На случай если в URL есть подчеркивания
+    
+    # Записываем клик в БД
+    record_click(f"lesson_{lesson_num}")
+    
+    # Отправляем ссылку
+    btn = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="✅ Гузаштан ба дарс", url=url)]])
+    await callback.message.answer(f"🚀 Шумо Дарси {lesson_num}-ро интихоб кардед. Барои тамошо тугмаи зерро пахш кунед:", reply_markup=btn)
+    await callback.answer()
+
+
 # --- РАССЫЛКА (Mailing) ---
 
 @dp.callback_query(lambda c: c.data == "admin_mailing")
 async def start_mailing(callback: types.CallbackQuery, state: FSMContext):
     if not is_admin(callback.from_user.id): return
     await state.set_state(MailingStates.waiting_for_text)
-    await callback.message.edit_text("📝 Введите текст для рассылки:", reply_markup=cancel_kb)
+    await callback.message.edit_text("📝 Введите ТЕКСТ для рассылки:", reply_markup=cancel_kb)
 
 @dp.message(MailingStates.waiting_for_text)
 async def mailing_text_received(message: types.Message, state: FSMContext):
     await state.update_data(text=message.text)
+    await state.set_state(MailingStates.waiting_for_photo)
+    await message.answer("🖼 Отправьте ФОТО для рассылки или нажмите /skip , если фото не нужно:", reply_markup=cancel_kb)
+
+@dp.message(MailingStates.waiting_for_photo)
+async def mailing_photo_received(message: types.Message, state: FSMContext):
+    if message.text == "/skip":
+        await state.update_data(photo=None)
+    elif message.photo:
+        await state.update_data(photo=message.photo[-1].file_id)
+    else:
+        await message.answer("Пожалуйста, отправьте фото или /skip")
+        return
+        
     await state.set_state(MailingStates.waiting_for_button_choice)
-    await message.answer("Выберите кнопку для сообщения:", reply_markup=lesson_choice_kb)
+    await message.answer("Выберите тип кнопки (Дарси 1/2/3):", reply_markup=lesson_choice_kb)
 
 @dp.callback_query(lambda c: c.data.startswith("lesson_"))
 async def mailing_button_choice(callback: types.CallbackQuery, state: FSMContext):
     choice = callback.data.split("_")[1]
+    await state.update_data(choice_num=choice)
+    
     if choice == "none":
         await state.update_data(button_text=None)
         await show_mailing_preview(callback.message, state)
@@ -580,7 +687,7 @@ async def mailing_button_choice(callback: types.CallbackQuery, state: FSMContext
         text = f"Тамошои Дарси {choice}"
         await state.update_data(button_text=text)
         await state.set_state(MailingStates.waiting_for_link)
-        await callback.message.edit_text(f"🔗 Отправьте ссылку для кнопки '{text}':", reply_markup=cancel_kb)
+        await callback.message.edit_text(f"🔗 Отправьте ССЫЛКУ для кнопки '{text}':", reply_markup=cancel_kb)
 
 @dp.message(MailingStates.waiting_for_link)
 async def mailing_link_received(message: types.Message, state: FSMContext):
@@ -593,15 +700,21 @@ async def mailing_link_received(message: types.Message, state: FSMContext):
 async def show_mailing_preview(message: types.Message, state: FSMContext):
     data = await state.get_data()
     text = data.get("text")
+    photo = data.get("photo")
     btn_text = data.get("button_text")
-    link = data.get("link")
     
     kb = None
-    if btn_text and link:
-        kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=btn_text, url=link)]])
+    if btn_text:
+        # Для превью показываем обычную кнопку, чтобы админ проверил ссылку
+        kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=btn_text, url=data.get("link", "#"))]])
         
     await message.answer("👀 ПРЕДПРОСМОТР СООБЩЕНИЯ:")
-    await message.answer(text, reply_markup=kb)
+    
+    if photo:
+        await message.answer_photo(photo, caption=text, reply_markup=kb)
+    else:
+        await message.answer(text, reply_markup=kb)
+        
     await message.answer("Все верно? Выберите время отправки:", reply_markup=mailing_confirm_kb)
     await state.set_state(MailingStates.waiting_for_confirm)
 
@@ -645,25 +758,37 @@ async def run_broadcast(state_or_data):
         data = state_or_data
         
     text = data.get("text")
+    photo = data.get("photo")
     btn_text = data.get("button_text")
+    choice_num = data.get("choice_num")
     link = data.get("link")
+    
     kb = None
     if btn_text and link:
-        kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=btn_text, url=link)]])
+        # Для трекинга меняем URL-кнопку на CALLBACK с данными для редиректа
+        kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=btn_text, callback_data=f"cl_{choice_num}_{link}")]])
     
-    users_list = load_users()
+    # Загружаем всех пользователей из БД вместо json
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT user_id FROM users")
+    users_list = [r[0] for r in c.fetchall()]
+    conn.close()
+    
     count = 0
     for user_id in users_list:
         try:
-            await bot.send_message(user_id, text, reply_markup=kb)
+            if photo:
+                await bot.send_photo(user_id, photo, caption=text, reply_markup=kb)
+            else:
+                await bot.send_message(user_id, text, reply_markup=kb)
             count += 1
-            await asyncio.sleep(0.05) # Защита от флуда
+            await asyncio.sleep(0.05)
         except Exception as e:
             logging.error(f"Failed to send to {user_id}: {e}")
             
-    # Уведомляем админа
     for admin_id in ADMIN_IDS:
-        await bot.send_message(admin_id, f"✅ Рассылка завершена! Получили: {count} пользователей.")
+        await bot.send_message(admin_id, f"✅ Рассылка завершена!\n📩 Видели (отправлено): {count}\n👤 Всего в базе: {len(users_list)}")
 
 @dp.callback_query(lambda c: c.data == "admin_cancel")
 async def admin_cancel(callback: types.CallbackQuery, state: FSMContext):
